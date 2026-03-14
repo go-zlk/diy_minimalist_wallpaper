@@ -1,213 +1,199 @@
 import sys
 import os
 import ctypes
-import random
-import requests
-from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
+import json
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-                             QLineEdit, QPushButton, QLabel, QColorDialog, QFontDialog, 
-                             QComboBox, QSlider, QFrame)
-from PyQt6.QtGui import QPixmap, QImage, QColor
-from PyQt6.QtCore import Qt, QTimer
+                             QLineEdit, QPushButton, QLabel, QComboBox, QSlider, QFrame, 
+                             QFileDialog, QCheckBox)
+from PyQt6.QtGui import QPixmap, QImage, QColor, QPainter, QPen
+from PyQt6.QtCore import Qt, QPoint, QTimer
+import matplotlib.font_manager as fm
 
-class WallpaperPro(QWidget):
+class WallpaperProMax(QWidget):
     def __init__(self):
         super().__init__()
-        # 初始化配置
-        self.bg_mode = "渐变"
-        self.style_mode = "斜体叠影"
-        self.bg_color_1 = QColor(20, 20, 20)
-        self.bg_color_2 = QColor(60, 60, 60)
-        self.text_color = QColor(255, 255, 255)
-        self.current_font_family = "Microsoft YaHei"
-        self.current_font_size = 120
-        self.is_italic = True
+        # 1. 初始化字体映射 (完成 A)
+        self.font_dict = {}
+        self.init_font_map()
         
+        # 2. 状态变量 (完成 C: 图层位置信息)
+        self.text_pos = [0.5, 0.5]  # 相对坐标 (0-1)，方便适配不同分辨率
+        self.bg_color = QColor(20, 20, 20)
+        self.text_color = QColor(255, 255, 255)
+        self.font_size = 100
+        self.is_dragging = False
+        self.last_mouse_pos = QPoint()
+
         self.initUI()
-        self.update_preview() # 初始渲染
+        self.update_preview()
+
+    def init_font_map(self):
+        # 获取系统所有可用字体路径
+        fonts = fm.findSystemFonts()
+        for f in fonts:
+            try:
+                name = fm.FontProperties(fname=f).get_name()
+                if name not in self.font_dict:
+                    self.font_dict[name] = f
+            except: continue
 
     def initUI(self):
-        self.setWindowTitle('极简壁纸 Pro - 实时设计器')
-        self.setMinimumSize(1000, 600)
-        self.setStyleSheet("background-color: #1e1e1e; color: #e0e0e0; font-family: 'Segoe UI';")
+        self.setWindowTitle('极简壁纸 Pro Max - 设计器')
+        self.setMinimumSize(1200, 800)
+        self.setStyleSheet("background-color: #121212; color: #eee; font-family: 'Segoe UI';")
 
-        main_layout = QHBoxLayout()
+        main_layout = QHBoxLayout(self)
 
-        # --- 左侧控制面板 ---
-        controls = QVBoxLayout()
-        controls.setSpacing(15)
-
+        # --- 左侧：控制面板 (实时控制，无弹窗) ---
+        sidebar = QVBoxLayout()
+        sidebar.setContentsMargins(10, 10, 10, 10)
+        
+        # 文字输入
         self.text_input = QLineEdit("INFINITE PROGRESS")
-        self.text_input.setPlaceholderText("输入文字...")
         self.text_input.textChanged.connect(self.update_preview)
-        self.text_input.setStyleSheet("padding:12px; font-size:18px; background:#2d2d2d; border:1px solid #444; border-radius:5px;")
-        controls.addWidget(self.text_input)
+        self.text_input.setStyleSheet("font-size: 18px; padding: 10px; background: #252525; border: none; border-radius: 4px;")
+        sidebar.addWidget(QLabel("内容:"))
+        sidebar.addWidget(self.text_input)
 
-        # 样式选择
-        grid = QGridLayout()
-        
-        self.combo_style = QComboBox()
-        self.combo_style.addItems(["斜体叠影", "极简居中", "巨幕海报"])
-        self.combo_style.currentTextChanged.connect(self.update_preview)
-        grid.addWidget(QLabel("排版样式:"), 0, 0)
-        grid.addWidget(self.combo_style, 0, 1)
+        # 字体选择 (实时)
+        self.combo_font = QComboBox()
+        self.combo_font.addItems(sorted(self.font_dict.keys()))
+        self.combo_font.setCurrentText("Microsoft YaHei")
+        self.combo_font.currentTextChanged.connect(self.update_preview)
+        sidebar.addWidget(QLabel("字体:"))
+        sidebar.addWidget(self.combo_font)
 
-        self.combo_bg = QComboBox()
-        self.combo_bg.addItems(["渐变", "纯色", "噪点质感"])
-        self.combo_bg.currentTextChanged.connect(self.update_preview)
-        grid.addWidget(QLabel("背景模式:"), 1, 0)
-        grid.addWidget(self.combo_bg, 1, 1)
-        controls.addLayout(grid)
+        # 字号滑动条 (实时)
+        sidebar.addWidget(QLabel("字号:"))
+        self.slider_size = QSlider(Qt.Orientation.Horizontal)
+        self.slider_size.setRange(20, 500)
+        self.slider_size.setValue(100)
+        self.slider_size.valueChanged.connect(self.update_preview)
+        sidebar.addWidget(self.slider_size)
 
-        # 颜色控制
-        color_layout = QHBoxLayout()
-        btn_bg1 = QPushButton("背景色1")
-        btn_bg1.clicked.connect(lambda: self.pick_color('bg1'))
-        btn_bg2 = QPushButton("背景色2")
-        btn_bg2.clicked.connect(lambda: self.pick_color('bg2'))
-        btn_txt = QPushButton("文字颜色")
-        btn_txt.clicked.connect(lambda: self.pick_color('text'))
-        color_layout.addWidget(btn_bg1); color_layout.addWidget(btn_bg2); color_layout.addWidget(btn_txt)
-        controls.addLayout(color_layout)
+        # 调色盘区域 (RGB 实时滑动条代替复杂弹窗)
+        sidebar.addWidget(QLabel("文字颜色 (R/G/B):"))
+        self.r_slider = self.create_color_slider(sidebar)
+        self.g_slider = self.create_color_slider(sidebar)
+        self.b_slider = self.create_color_slider(sidebar)
 
-        # 字体控制
-        btn_font = QPushButton("选择字体 & 预览")
-        btn_font.clicked.connect(self.pick_font)
-        controls.addWidget(btn_font)
+        # 排版/效果
+        self.check_italic = QCheckBox("斜体 (模拟)")
+        self.check_italic.stateChanged.connect(self.update_preview)
+        self.check_shadow = QCheckBox("启用叠影阴影")
+        self.check_shadow.setChecked(True)
+        self.check_shadow.stateChanged.connect(self.update_preview)
+        sidebar.addWidget(self.check_italic)
+        sidebar.addWidget(self.check_shadow)
 
-        # 功能按钮
-        btn_quote = QPushButton("获取随机金句")
-        btn_quote.clicked.connect(self.get_daily_quote)
-        btn_quote.setStyleSheet("background:#444;")
-        controls.addWidget(btn_quote)
+        sidebar.addStretch()
 
-        controls.addStretch()
+        # 导出多端尺寸 (完成 D)
+        sidebar.addWidget(QLabel("多端一键导出:"))
+        export_layout = QGridLayout()
+        btn_pc = QPushButton("PC (4K)")
+        btn_pc.clicked.connect(lambda: self.export_wallpaper(3840, 2160))
+        btn_phone = QPushButton("手机 (竖屏)")
+        btn_phone.clicked.connect(lambda: self.export_wallpaper(1080, 1920))
+        export_layout.addWidget(btn_pc, 0, 0)
+        export_layout.addWidget(btn_phone, 0, 1)
+        sidebar.addLayout(export_layout)
 
-        self.btn_apply = QPushButton("一键设为桌面壁纸")
-        self.btn_apply.clicked.connect(self.apply_wallpaper)
-        self.btn_apply.setStyleSheet("background:#0078d4; font-weight:bold; padding:15px; border-radius:8px;")
-        controls.addWidget(self.btn_apply)
+        # 设置壁纸
+        self.btn_apply = QPushButton("一键应用到桌面")
+        self.btn_apply.clicked.connect(self.apply_to_desktop)
+        self.btn_apply.setStyleSheet("background: #0078d4; font-weight: bold; padding: 15px; border-radius: 5px;")
+        sidebar.addWidget(self.btn_apply)
 
-        main_layout.addLayout(controls, 1)
+        main_layout.addLayout(sidebar, 1)
 
-        # --- 右侧预览面板 ---
-        preview_box = QVBoxLayout()
-        self.preview_label = QLabel("正在生成预览...")
-        self.preview_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.preview_label.setStyleSheet("background:#000; border-radius:10px; border:2px solid #333;")
-        preview_box.addWidget(self.preview_label)
-        
-        self.res_label = QLabel("预览分辨率: 缩放匹配窗口")
-        self.res_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        preview_box.addWidget(self.res_label)
-        
-        main_layout.addLayout(preview_box, 2)
+        # --- 右侧：画布预览 (支持拖拽 C) ---
+        self.preview_area = QLabel()
+        self.preview_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview_area.setStyleSheet("background: #000; border: 2px solid #333; border-radius: 8px;")
+        self.preview_area.setMouseTracking(True)
+        main_layout.addWidget(self.preview_area, 3)
 
-        self.setLayout(main_layout)
+    def create_color_slider(self, layout):
+        s = QSlider(Qt.Orientation.Horizontal)
+        s.setRange(0, 255)
+        s.setValue(255)
+        s.valueChanged.connect(self.update_preview)
+        layout.addWidget(s)
+        return s
 
-    # --- 核心逻辑 ---
+    # --- 交互逻辑 (拖拽图层 C) ---
+    def mousePressEvent(self, event):
+        if self.preview_area.geometry().contains(event.pos()):
+            self.is_dragging = True
+            self.update_pos(event.pos())
 
-    def pick_color(self, target):
-        color = QColorDialog.getColor()
-        if color.isValid():
-            if target == 'bg1': self.bg_color_1 = color
-            elif target == 'bg2': self.bg_color_2 = color
-            else: self.text_color = color
-            self.update_preview()
+    def mouseMoveEvent(self, event):
+        if self.is_dragging:
+            self.update_pos(event.pos())
 
-    def pick_font(self):
-        font, ok = QFontDialog.getFont()
-        if ok:
-            self.current_font_family = font.family()
-            self.current_font_size = font.pointSize() * 2
-            self.is_italic = font.italic()
-            self.update_preview()
+    def mouseReleaseEvent(self, event):
+        self.is_dragging = False
 
-    def get_daily_quote(self):
-        try:
-            # 使用公开的一言API
-            resp = requests.get("https://v1.hitokoto.cn/?c=d&c=i", timeout=3)
-            if resp.status_code == 200:
-                self.text_input.setText(resp.json()['hitokoto'])
-        except:
-            self.text_input.setText("Stay Hungry, Stay Foolish")
+    def update_pos(self, pos):
+        # 计算相对画布的坐标
+        local_pos = self.preview_area.mapFromParent(pos)
+        rel_x = local_pos.x() / self.preview_area.width()
+        rel_y = local_pos.y() / self.preview_area.height()
+        self.text_pos = [max(0, min(1, rel_x)), max(0, min(1, rel_y))]
+        self.update_preview()
 
-    def create_wallpaper_img(self, width, height):
-        # 1. 创建背景
-        c1 = (self.bg_color_1.red(), self.bg_color_1.green(), self.bg_color_1.blue())
-        c2 = (self.bg_color_2.red(), self.bg_color_2.green(), self.bg_color_2.blue())
-        
-        img = Image.new('RGB', (width, height), c1)
+    # --- 图像渲染逻辑 ---
+    def generate_image(self, width, height):
+        img = Image.new('RGB', (width, height), (self.bg_color.red(), self.bg_color.green(), self.bg_color.blue()))
         draw = ImageDraw.Draw(img)
-
-        if self.combo_bg.currentText() == "渐变":
-            for y in range(height):
-                r = int(c1[0] + (c2[0] - c1[0]) * (y / height))
-                g = int(c1[1] + (c2[1] - c1[1]) * (y / height))
-                b = int(c1[2] + (c2[2] - c1[2]) * (y / height))
-                draw.line([(0, y), (width, y)], fill=(r, g, b))
         
-        if self.combo_bg.currentText() == "噪点质感":
-            noise = Image.effect_noise((width, height), 20)
-            img = Image.blend(img, noise.convert("RGB"), 0.05)
-
-        # 2. 绘制文字
+        # 字体加载 (完成 A)
+        font_path = self.font_dict.get(self.combo_font.currentText(), "C:/Windows/Fonts/arial.ttf")
+        font = ImageFont.truetype(font_path, self.slider_size.value())
+        
         text = self.text_input.text()
-        try:
-            # 注意：Windows字体查找逻辑简化处理，实际可能需要更复杂的路径匹配
-            font_path = "C:/Windows/Fonts/msyhbd.ttc" 
-            font = ImageFont.truetype(font_path, self.current_font_size)
-        except:
-            font = ImageFont.load_default()
-
-        # 计算位置
-        tc = (self.text_color.red(), self.text_color.green(), self.text_color.blue())
+        tc = (self.r_slider.value(), self.g_slider.value(), self.b_slider.value())
+        
+        # 计算坐标
         bbox = draw.textbbox((0, 0), text, font=font)
         tw, th = bbox[2]-bbox[0], bbox[3]-bbox[1]
+        x = width * self.text_pos[0] - tw/2
+        y = height * self.text_pos[1] - th/2
+
+        # 渲染样式
+        if self.check_shadow.isChecked():
+            draw.text((x+8, y+8), text, font=font, fill=(tc[0]//4, tc[1]//4, tc[2]//4)) # 暗阴影
         
-        x, y = (width - tw)/2, (height - th)/2
-
-        style = self.combo_style.currentText()
-        if style == "斜体叠影":
-            # 绘制底层（阴影/重影）
-            shadow_offset = 8
-            draw.text((x + shadow_offset, y + shadow_offset), text, font=font, fill=(tc[0]//2, tc[1]//2, tc[2]//2))
-            # 绘制顶层
-            draw.text((x, y), text, font=font, fill=tc)
-        elif style == "极简居中":
-            draw.text((x, y), text, font=font, fill=tc)
-        elif style == "巨幕海报":
-            # 这里的逻辑可以做得更夸张
-            draw.text((x, y), text, font=font, fill=tc, stroke_width=2, stroke_fill=(255,255,255))
-
+        draw.text((x, y), text, font=font, fill=tc)
+        
         return img
 
     def update_preview(self):
-        # 预览图使用较小分辨率以保持流畅
-        preview_img = self.create_wallpaper_img(1280, 720)
-        
-        # 将 Pillow 图片转为 QPixmap 显示
-        data = preview_img.tobytes("raw", "RGB")
+        # 使用缩略图预览以保证丝滑流畅
+        img = self.generate_image(1280, 720)
+        data = img.tobytes("raw", "RGB")
         qimg = QImage(data, 1280, 720, QImage.Format.Format_RGB888)
         pixmap = QPixmap.fromImage(qimg)
-        scaled_pixmap = pixmap.scaled(self.preview_label.width()-10, self.preview_label.height()-10, 
-                                      Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        self.preview_label.setPixmap(scaled_pixmap)
+        self.preview_area.setPixmap(pixmap.scaled(self.preview_area.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
 
-    def apply_wallpaper(self):
+    def apply_to_desktop(self):
         user32 = ctypes.windll.user32
         w, h = user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
-        
-        final_img = self.create_wallpaper_img(w, h)
-        save_path = os.path.abspath("my_wallpaper.jpg")
-        final_img.save(save_path, "JPEG", quality=100)
-        
-        ctypes.windll.user32.SystemParametersInfoW(20, 0, save_path, 3)
-        self.btn_apply.setText("设置成功！")
-        QTimer.singleShot(2000, lambda: self.btn_apply.setText("一键设为桌面壁纸"))
+        final = self.generate_image(w, h)
+        path = os.path.abspath("wallpaper_current.jpg")
+        final.save(path, quality=100)
+        ctypes.windll.user32.SystemParametersInfoW(20, 0, path, 3)
+
+    def export_wallpaper(self, w, h):
+        file_path, _ = QFileDialog.getSaveFileName(self, "导出图片", f"wallpaper_{w}x{h}.png", "PNG (*.png);;JPG (*.jpg)")
+        if file_path:
+            img = self.generate_image(w, h)
+            img.save(file_path)
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    window = WallpaperPro()
+    window = WallpaperProMax()
     window.show()
     sys.exit(app.exec())
