@@ -6,10 +6,50 @@ import traceback
 from PIL import Image, ImageDraw, ImageFont
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLineEdit, QPushButton, QLabel, QComboBox, QSlider,
-                             QFrame, QCheckBox, QScrollArea)
+                             QFrame, QCheckBox, QScrollArea, QFileDialog)
 from PyQt6.QtGui import (QPixmap, QImage, QColor, QPainter, QConicalGradient,
                          QLinearGradient, QBrush, QPen, QPainterPath)
 from PyQt6.QtCore import Qt, QPointF, pyqtSignal, QTimer, QRectF
+from datetime import datetime
+
+# 输出目录（相对于程序所在目录）
+OUTPUT_DIR = "output"
+
+def get_output_dir():
+    if getattr(sys, "frozen", False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    out = os.path.join(base, OUTPUT_DIR)
+    if not os.path.exists(out):
+        os.makedirs(out)
+    return out
+
+def get_arrow_path():
+    """返回下拉箭头图片路径，不存在则创建"""
+    if getattr(sys, "frozen", False):
+        base = os.path.dirname(sys.executable)
+    else:
+        base = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(base, "arrow_down.png")
+    if not os.path.exists(path):
+        try:
+            img = Image.new("RGBA", (16, 16), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(img)
+            draw.polygon([(2, 5), (8, 12), (14, 5)], fill=(160, 160, 160, 255))
+            img.save(path)
+        except Exception:
+            pass
+    return path
+
+# 壁纸比例 (宽:高)，None 表示使用屏幕实际尺寸
+ASPECT_RATIOS = {
+    "21:9": (21, 9), "16:9": (16, 9), "16:10": (16, 10),
+    "4:3": (4, 3), "3:4": (3, 4), "3:2": (3, 2), "2:3": (2, 3),
+    "1:1": (1, 1),
+    "9:16": (9, 16), "9:21": (9, 21),
+    "屏幕": None,
+}
 
 # --- 现代调色盘组件（超大圆角 SV + 呼吸感双环手柄）---
 class ColorWheelPicker(QWidget):
@@ -66,7 +106,7 @@ class ColorWheelPicker(QWidget):
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setClipPath(path)
 
-        pad = 4
+        pad = 8
         h_grad = QLinearGradient(bx - pad, 0, bx + box_size + pad, 0)
         h_grad.setColorAt(0, Qt.GlobalColor.white)
         h_grad.setColorAt(1, QColor.fromHsvF(self.hue, 1.0, 1.0))
@@ -80,6 +120,9 @@ class ColorWheelPicker(QWidget):
                          box_size + pad * 2, box_size + pad * 2, v_grad)
 
         painter.setClipping(False)
+        painter.setPen(QPen(QColor("#1A1A1A"), 1))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawPath(path)
 
         # 3. 色相环手柄：呼吸感双环（外环白空心+发光，内环实心当前色）
         angle_rad = self.hue * 2 * math.pi
@@ -127,6 +170,8 @@ class ColorWheelPicker(QWidget):
             if angle < 0:
                 angle += 2 * math.pi
             self.hue = angle / (2 * math.pi)
+            self.sat = 1.0
+            self.val = 1.0
         else:
             inner_r = self.width() / 2 - 30
             box_s = int(inner_r * 1.2)
@@ -140,10 +185,12 @@ class ColorWheelPicker(QWidget):
         self.update()
 
     def mousePressEvent(self, event):
-        self.handle_mouse(event.pos())
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.handle_mouse(event.pos())
 
     def mouseMoveEvent(self, event):
-        self.handle_mouse(event.pos())
+        if event.buttons() & Qt.MouseButton.LeftButton:
+            self.handle_mouse(event.pos())
 
 
 # --- 带标题的分组容器（解决 QGroupBox 重叠问题）---
@@ -177,8 +224,8 @@ class WallpaperUltra(QWidget):
         self.font_dict = {"默认字体": "C:/Windows/Fonts/msyhbd.ttc"}
         self.font_cache = {}
         self.edit_target = "text"
-        self.text_color = QColor("#64FFDA")
-        self.bg_color = QColor("#0A0A0A")
+        self.text_color = QColor("#212122")
+        self.bg_color = QColor("#F7F7F8")
         self.text_pos = [0.5, 0.5]
 
         self.initUI()
@@ -212,7 +259,7 @@ class WallpaperUltra(QWidget):
         self.update_preview()
 
     def initUI(self):
-        self.setWindowTitle("极简壁纸 Ultra Pro - 最终版")
+        self.setWindowTitle("极简壁纸DIY")
         self.setMinimumSize(1100, 800)
         self.setObjectName("mainWindow")
         self.setStyleSheet(
@@ -247,14 +294,56 @@ class WallpaperUltra(QWidget):
             "padding: 10px; border: 1px solid rgba(255,255,255,0.06);"
         )
         self.text_input.textChanged.connect(self.update_preview)
+        self.text_input.textChanged.connect(self.update_font_hint)
         sec_content.addWidget(self.text_input)
 
+        arrow_path = get_arrow_path().replace("\\", "/")
+        combo_style = """
+            QComboBox {
+                background: rgba(50, 50, 55, 0.95);
+                border: 1px solid rgba(255,255,255,0.08);
+                border-radius: 10px;
+                padding: 10px 12px;
+                padding-right: 32px;
+                padding-left: 12px;
+                min-height: 20px;
+                color: #E0E0E0;
+            }
+            QComboBox:hover { border-color: rgba(255,255,255,0.15); }
+            QComboBox::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: right center;
+                right: 4px;
+                width: 24px;
+                border: none;
+                background: transparent;
+                border-radius: 6px;
+            }
+            QComboBox::down-arrow {
+                image: url("%s");
+                width: 12px;
+                height: 12px;
+            }
+        """ % arrow_path
+        combo_style += """
+            QComboBox QAbstractItemView {
+                background: rgba(45, 45, 50, 0.98);
+                border: 1px solid rgba(255,255,255,0.08);
+                border-radius: 10px;
+                padding: 6px;
+                selection-background-color: #0078D4;
+                selection-color: white;
+                outline: none;
+            }
+            QComboBox QAbstractItemView::item {
+                min-height: 28px;
+                padding: 4px 10px;
+                border-radius: 6px;
+            }
+        """
         self.combo_font = QComboBox()
         self.combo_font.addItem("默认字体")
-        self.combo_font.setStyleSheet(
-            "background: rgba(50, 50, 55, 0.9); border-radius: 8px; "
-            "padding: 8px; border: 1px solid rgba(255,255,255,0.06);"
-        )
+        self.combo_font.setStyleSheet(combo_style)
         self.combo_font.currentTextChanged.connect(self.on_font_changed)
         sec_content.addWidget(self.combo_font)
 
@@ -291,6 +380,14 @@ class WallpaperUltra(QWidget):
         self.slider_letter_spacing.valueChanged.connect(self.on_letter_spacing_changed)
         sec_content.addWidget(self.slider_letter_spacing)
 
+        sec_content.addWidget(QLabel("壁纸比例:"))
+        self.combo_aspect = QComboBox()
+        self.combo_aspect.addItems(list(ASPECT_RATIOS.keys()))
+        self.combo_aspect.setCurrentText("16:9")
+        self.combo_aspect.setStyleSheet(combo_style)
+        self.combo_aspect.currentTextChanged.connect(self.on_aspect_changed)
+        sec_content.addWidget(self.combo_aspect)
+
         sidebar.addWidget(sec_content)
         sidebar.addWidget(QFrame(frameShape=QFrame.Shape.HLine,
                          styleSheet="background: rgba(255,255,255,0.08); margin: 8px 0;"))
@@ -324,6 +421,7 @@ class WallpaperUltra(QWidget):
         self.color_picker = ColorWheelPicker()
         self.color_picker.colorChanged.connect(self.handle_color_change)
         sec_color.addWidget(self.color_picker, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.switch_target("text")
         sidebar.addWidget(sec_color)
         sidebar.addWidget(QFrame(frameShape=QFrame.Shape.HLine,
                          styleSheet="background: rgba(255,255,255,0.08); margin: 8px 0;"))
@@ -340,19 +438,27 @@ class WallpaperUltra(QWidget):
         sec_style.addWidget(self.label_shadow_offset)
 
         self.slider_shadow_offset = QSlider(Qt.Orientation.Horizontal)
-        self.slider_shadow_offset.setRange(0, 200)
+        self.slider_shadow_offset.setRange(0, 600)
         self.slider_shadow_offset.valueChanged.connect(self.on_shadow_offset_changed)
         self.slider_shadow_offset.blockSignals(True)
         self.slider_shadow_offset.setValue(0)
         self.slider_shadow_offset.blockSignals(False)
         sec_style.addWidget(self.slider_shadow_offset)
 
-        self.check_italic = QCheckBox("模拟斜体 (修复边缘)")
+        self.check_italic = QCheckBox("模拟斜体")
         self.check_italic.stateChanged.connect(self.update_preview)
         sec_style.addWidget(self.check_italic)
 
         sidebar.addWidget(sec_style)
         sidebar.addStretch()
+
+        self.btn_save = QPushButton("保存图片")
+        self.btn_save.setStyleSheet(
+            "background: rgba(60, 60, 65, 0.9); height: 42px; border-radius: 10px; "
+            "border: 1px solid rgba(255,255,255,0.08);"
+        )
+        self.btn_save.clicked.connect(self.save_image)
+        sidebar.addWidget(self.btn_save)
 
         self.btn_apply = QPushButton("一键应用桌面壁纸")
         self.btn_apply.setStyleSheet(
@@ -364,23 +470,60 @@ class WallpaperUltra(QWidget):
 
         main_layout.addWidget(sidebar_container)
 
-        # 右侧预览区（含任务栏模拟）
         self.preview_area = QLabel("正在初始化预览...")
         self.preview_area.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.preview_area.setScaledContents(False)
         self.preview_area.setStyleSheet(
-            "background: #0A0A0A; border-radius: 16px; "
-            "border: 1px solid rgba(255,255,255,0.06);"
+            "background: #F7F7F8; border-radius: 16px; "
+            "border: 1px solid rgba(0,0,0,0.08);"
         )
         self.preview_area.setMinimumSize(400, 300)
         main_layout.addWidget(self.preview_area, 1)
 
-    def on_font_changed(self, font_name):
-        symbol_fonts = ("wingding", "webding", "symbol", "marlett")
+    def _has_cjk(self, text):
+        """检测文本是否包含中日韩字符"""
+        for ch in text:
+            cp = ord(ch)
+            if (0x4E00 <= cp <= 0x9FFF or  # CJK 统一汉字
+                0x3400 <= cp <= 0x4DBF or  # CJK 扩展 A
+                0x3000 <= cp <= 0x303F or  # CJK 符号
+                0x3040 <= cp <= 0x30FF):   # 平假名、片假名
+                return True
+        return False
+
+    def _font_supports_cjk(self, font_name):
+        """判断字体是否可能支持中文"""
+        cjk_patterns = ("msyh", "simsun", "simhei", "dengxian", "fangsong",
+                        "kaiti", "sourcehan", "notosanscjk", "pingfang", "heiti",
+                        "stsong", "stkaiti", "stfangsong", "stzhongsong", "stxihei",
+                        "weiruanyahei", "microsoft yahei", "宋体", "黑体", "楷体",
+                        "仿宋", "微软雅黑", "苹方", "思源")
+        fn = font_name.lower()
+        return any(p in fn for p in cjk_patterns)
+
+    def _use_fallback_font(self, font_name):
+        patterns = ("wingding", "webding", "symbol", "marlett", "segmd", "segmdl2")
+        return any(p in font_name.lower() for p in patterns)
+
+    def _need_cjk_fallback(self, font_name, text):
+        """当文本含中文且字体不支持中文时需回退"""
+        return text and self._has_cjk(text) and not self._font_supports_cjk(font_name)
+
+    def update_font_hint(self):
+        font_name = self.combo_font.currentText()
+        text = self.text_input.text()
+        symbol_fonts = ("wingding", "webding", "symbol", "marlett", "segmd", "segmdl2")
         is_symbol = any(s in font_name.lower() for s in symbol_fonts)
+        need_cjk = self._need_cjk_fallback(font_name, text)
         if is_symbol:
             self.label_font_hint.setText("提示：符号字体可能无法正常显示文字")
+        elif need_cjk:
+            self.label_font_hint.setText("提示：该字体不支持中文，已自动切换为微软雅黑")
         else:
             self.label_font_hint.setText("")
+
+    def on_font_changed(self, font_name):
+        self.update_font_hint()
         self.update_preview()
 
     def on_font_size_changed(self, value):
@@ -391,8 +534,11 @@ class WallpaperUltra(QWidget):
         self.label_letter_spacing.setText("字间距: %d" % value)
         self.update_preview()
 
+    def on_aspect_changed(self, text):
+        self.update_preview()
+
     def on_shadow_offset_changed(self, value):
-        self.label_shadow_offset.setText("叠影偏移量: %d" % (value / 2))
+        self.label_shadow_offset.setText("叠影偏移量: %d" % (value / 6))
         self.update_preview()
 
     def switch_target(self, target):
@@ -416,15 +562,15 @@ class WallpaperUltra(QWidget):
             text_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
             draw = ImageDraw.Draw(text_layer)
 
-            font_path = self.font_dict.get(
-                self.combo_font.currentText(),
-                "C:/Windows/Fonts/msyhbd.ttc"
-            )
+            font_name = self.combo_font.currentText()
+            font_path = self.font_dict.get(font_name, "C:/Windows/Fonts/msyhbd.ttc")
             scale = w / 1920
             fs = int(self.slider_size.value() * (scale if is_preview else 1.0))
             font = self.get_cached_font(font_path, max(5, fs))
 
             text = self.text_input.text()
+            if text and (self._use_fallback_font(font_name) or self._need_cjk_fallback(font_name, text)):
+                font = self.get_cached_font("C:/Windows/Fonts/msyhbd.ttc", max(5, fs))
             tc = (self.text_color.red(), self.text_color.green(), self.text_color.blue())
             letter_spacing = self.slider_letter_spacing.value()
 
@@ -445,10 +591,10 @@ class WallpaperUltra(QWidget):
                 pass
             elif letter_spacing == 0:
                 bbox = draw.textbbox((0, 0), text, font=font)
-                tw = bbox[2] - bbox[0]
-                th = bbox[3] - bbox[1]
-                x = w * self.text_pos[0] - tw / 2
-                y = h * self.text_pos[1] - th / 2
+                cx = (bbox[0] + bbox[2]) / 2
+                cy = (bbox[1] + bbox[3]) / 2
+                x = w * self.text_pos[0] - cx
+                y = h * self.text_pos[1] - cy
 
                 def simple_draw(px, py, fill):
                     draw.text((px, py), text, font=font, fill=fill)
@@ -460,10 +606,10 @@ class WallpaperUltra(QWidget):
                     bbox = draw.textbbox((0, 0), ch, font=font)
                     char_widths.append(bbox[2] - bbox[0])
                 total_w = sum(char_widths) + letter_spacing * (len(text) - 1)
-                bbox = draw.textbbox((0, 0), text[0], font=font)
-                th = bbox[3] - bbox[1]
+                bbox = draw.textbbox((0, 0), text, font=font)
+                cy = (bbox[1] + bbox[3]) / 2
                 x = w * self.text_pos[0] - total_w / 2
-                y = h * self.text_pos[1] - th / 2
+                y = h * self.text_pos[1] - cy
 
                 def char_draw(px, py, fill):
                     for j, ch in enumerate(text):
@@ -473,67 +619,120 @@ class WallpaperUltra(QWidget):
                 draw_text_with_shadow(x, y, char_draw)
 
             if self.check_italic.isChecked():
-                _, th = text_layer.size
-                # 向右倾斜，补偿位移使文字中心保持不动
-                tx = -0.1 * th
-                text_layer = text_layer.transform(
-                    text_layer.size, Image.Transform.AFFINE,
-                    (1, 0.2, tx, 0, 1, 0),
-                    resample=Image.Resampling.LANCZOS
-                )
+                tw, th = text_layer.size
+                tx = -0.075 * th
+                try:
+                    sheared = text_layer.transform(
+                        text_layer.size, Image.Transform.AFFINE,
+                        (1, 0.15, tx, 0, 1, 0),
+                        resample=Image.Resampling.BICUBIC
+                    )
+                    text_layer = sheared
+                except Exception:
+                    pass
 
             img.paste(text_layer, (0, 0), text_layer)
-
-            if is_preview:
-                img = self.draw_taskbar_overlay(img, w, h)
 
             return img
         except Exception as e:
             print("渲染图片出错:", e)
             return Image.new("RGB", (w, h), (0, 0, 0))
 
-    def draw_taskbar_overlay(self, img, w, h):
-        taskbar_h = max(24, int(h * 0.04))
-        overlay = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(overlay)
-        bar_y = h - taskbar_h
-        draw.rectangle(
-            [0, bar_y, w, h],
-            fill=(30, 30, 35, 180),
-            outline=(60, 60, 65, 100)
-        )
-        dot_r = 4
-        dot_y = bar_y + taskbar_h // 2
-        for i in range(8):
-            dot_x = 24 + i * 36
-            draw.ellipse(
-                [dot_x - dot_r, dot_y - dot_r, dot_x + dot_r, dot_y + dot_r],
-                fill=(120, 120, 130, 200)
-            )
-        img_rgba = img.convert("RGBA")
-        img_rgba = Image.alpha_composite(img_rgba, overlay)
-        return img_rgba.convert("RGB")
+    def _get_wallpaper_filename(self, ext=".jpg"):
+        text = self.text_input.text().strip()
+        safe = "".join(c if c not in '\\/:*?"<>|' else "_" for c in text)
+        safe = safe.replace(" ", "_") or "wallpaper"
+        date_str = datetime.now().strftime("%y%m%d")
+        return "wallpaper_%s_%s%s" % (safe, date_str, ext)
+
+    def _get_wallpaper_size(self):
+        val = ASPECT_RATIOS.get(self.combo_aspect.currentText(), (16, 9))
+        if val is None:
+            try:
+                user32 = ctypes.windll.user32
+                return user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+            except Exception:
+                return 1920, 1080
+        rw, rh = val
+        base = 1920
+        if rw >= rh:
+            return base, int(base * rh / rw)
+        return int(base * rw / rh), base
 
     def update_preview(self):
-        pw = self.preview_area.width()
-        ph = self.preview_area.height()
-        if pw < 50:
+        display_w = self.preview_area.width()
+        display_h = self.preview_area.height()
+        if display_w < 50 or display_h < 30:
+            display_w = max(400, self.width() - 350)
+            display_h = max(300, self.height() - 50)
+        img_w, img_h = self._get_wallpaper_size()
+        img = self.generate_img(img_w, img_h, is_preview=True)
+        scale = min(display_w / img_w, display_h / img_h)
+        fit_w = int(img_w * scale)
+        fit_h = int(img_h * scale)
+        if fit_w < 1 or fit_h < 1:
             return
-        img = self.generate_img(pw, ph, is_preview=True)
-        data = img.tobytes("raw", "RGB")
-        qimg = QImage(data, img.size[0], img.size[1], img.size[0] * 3,
+        img_scaled = img.resize((fit_w, fit_h), Image.Resampling.LANCZOS)
+        canvas = Image.new("RGB", (display_w, display_h), (0xD1, 0xD1, 0xD6))
+        paste_x = (display_w - fit_w) // 2
+        paste_y = (display_h - fit_h) // 2
+        canvas.paste(img_scaled, (paste_x, paste_y))
+        data = canvas.tobytes("raw", "RGB")
+        qimg = QImage(data, display_w, display_h, display_w * 3,
                       QImage.Format.Format_RGB888)
         self.preview_area.setPixmap(QPixmap.fromImage(qimg))
 
-    def apply_wallpaper(self):
-        user32 = ctypes.windll.user32
-        w = user32.GetSystemMetrics(0)
-        h = user32.GetSystemMetrics(1)
+    def get_output_size(self):
+        val = ASPECT_RATIOS.get(self.combo_aspect.currentText())
+        if val is None:
+            try:
+                user32 = ctypes.windll.user32
+                return user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+            except Exception:
+                return 1920, 1080
+        rw, rh = val
+        base = 1920
+        if rw >= rh:
+            return base, int(base * rh / rw)
+        return int(base * rw / rh), base
+
+    def save_image(self):
+        try:
+            user32 = ctypes.windll.user32
+            w = user32.GetSystemMetrics(0)
+            h = user32.GetSystemMetrics(1)
+        except Exception:
+            w, h = 1920, 1080
         final = self.generate_img(w, h, is_preview=False)
-        path = os.path.abspath("wallpaper_final.jpg")
+        default_path = os.path.join(get_output_dir(), self._get_wallpaper_filename())
+        path, _ = QFileDialog.getSaveFileName(
+            self, "保存图片", default_path,
+            "JPEG 图片 (*.jpg *.jpeg);;PNG 图片 (*.png);;所有文件 (*)"
+        )
+        if path:
+            if path.lower().endswith(".png"):
+                final.save(path)
+            else:
+                final.save(path, quality=95)
+            print("图片已保存:", path)
+
+    def apply_wallpaper(self):
+        try:
+            user32 = ctypes.windll.user32
+            w = user32.GetSystemMetrics(0)
+            h = user32.GetSystemMetrics(1)
+        except Exception:
+            w, h = 1920, 1080
+        final = self.generate_img(w, h, is_preview=False)
+        out_dir = get_output_dir()
+        path = os.path.join(out_dir, self._get_wallpaper_filename())
         final.save(path, quality=100)
         ctypes.windll.user32.SystemParametersInfoW(20, 0, path, 3)
-        print("壁纸已成功设置:", path)
+        print("壁纸已成功设置:", path, "(%d x %d)" % (w, h))
+
+    def showEvent(self, event):
+        QTimer.singleShot(50, self.update_preview)
+        super().showEvent(event)
 
     def resizeEvent(self, event):
         self.update_preview()
