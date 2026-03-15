@@ -3,7 +3,7 @@ import os
 import ctypes
 import math
 import traceback
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from PyQt6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout,
                              QLineEdit, QPushButton, QLabel, QComboBox, QSlider,
                              QFrame, QCheckBox, QScrollArea, QFileDialog)
@@ -438,7 +438,7 @@ class WallpaperUltra(QWidget):
         sec_style.addWidget(self.label_shadow_offset)
 
         self.slider_shadow_offset = QSlider(Qt.Orientation.Horizontal)
-        self.slider_shadow_offset.setRange(0, 600)
+        self.slider_shadow_offset.setRange(0, 200)
         self.slider_shadow_offset.valueChanged.connect(self.on_shadow_offset_changed)
         self.slider_shadow_offset.blockSignals(True)
         self.slider_shadow_offset.setValue(0)
@@ -538,7 +538,7 @@ class WallpaperUltra(QWidget):
         self.update_preview()
 
     def on_shadow_offset_changed(self, value):
-        self.label_shadow_offset.setText("叠影偏移量: %d" % (value / 6))
+        self.label_shadow_offset.setText("叠影偏移量: %d" % (value / 2))
         self.update_preview()
 
     def switch_target(self, target):
@@ -559,33 +559,42 @@ class WallpaperUltra(QWidget):
         try:
             bg_rgb = (self.bg_color.red(), self.bg_color.green(), self.bg_color.blue())
             img = Image.new("RGB", (w, h), bg_rgb)
-            text_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            if is_preview:
+                ss = 1 if w * h < 600000 else 2
+            else:
+                pixels = w * h
+                ss = 4 if pixels <= 2073600 else (3 if pixels <= 3686400 else 2)
+            tw, th = w * ss, h * ss
+            text_layer = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
             draw = ImageDraw.Draw(text_layer)
+            draw.fontmode = "L"
 
             font_name = self.combo_font.currentText()
             font_path = self.font_dict.get(font_name, "C:/Windows/Fonts/msyhbd.ttc")
             scale = w / 1920
-            fs = int(self.slider_size.value() * (scale if is_preview else 1.0))
+            fs = int(self.slider_size.value() * (scale if is_preview else 1.0)) * ss
             font = self.get_cached_font(font_path, max(5, fs))
 
             text = self.text_input.text()
             if text and (self._use_fallback_font(font_name) or self._need_cjk_fallback(font_name, text)):
                 font = self.get_cached_font("C:/Windows/Fonts/msyhbd.ttc", max(5, fs))
             tc = (self.text_color.red(), self.text_color.green(), self.text_color.blue())
-            letter_spacing = self.slider_letter_spacing.value()
+            letter_spacing = self.slider_letter_spacing.value() * ss
 
-            shadow_offset = self.slider_shadow_offset.value() / 100.00
-            shadow_steps = 8
+            shadow_offset = self.slider_shadow_offset.value() / 100.00 * ss
+            shadow_steps = 6 if (is_preview and w * h < 600000) else 12
 
             shadow_rgb = (max(0, int(tc[0] * 0.2)), max(0, int(tc[1] * 0.2)),
                           max(0, int(tc[2] * 0.2)))
 
-            def draw_text_with_shadow(cx, cy, draw_fn):
-                if self.check_stack.isChecked():
-                    for i in range(shadow_steps, 0, -1):
-                        off = i * shadow_offset
-                        draw_fn(cx + off, cy + off, (shadow_rgb[0], shadow_rgb[1], shadow_rgb[2], 255))
-                draw_fn(cx, cy, (tc[0], tc[1], tc[2], 255))
+            def draw_shadow_only(draw_obj, cx, cy, draw_fn):
+                for i in range(shadow_steps, 0, -1):
+                    off = i * shadow_offset
+                    draw_fn(draw_obj, cx + off, cy + off,
+                            (shadow_rgb[0], shadow_rgb[1], shadow_rgb[2], 255))
+
+            def draw_main_only(draw_obj, cx, cy, draw_fn):
+                draw_fn(draw_obj, cx, cy, (tc[0], tc[1], tc[2], 255))
 
             if not text:
                 pass
@@ -593,13 +602,23 @@ class WallpaperUltra(QWidget):
                 bbox = draw.textbbox((0, 0), text, font=font)
                 cx = (bbox[0] + bbox[2]) / 2
                 cy = (bbox[1] + bbox[3]) / 2
-                x = w * self.text_pos[0] - cx
-                y = h * self.text_pos[1] - cy
+                x = tw * self.text_pos[0] - cx
+                y = th * self.text_pos[1] - cy
 
-                def simple_draw(px, py, fill):
-                    draw.text((px, py), text, font=font, fill=fill)
+                def simple_draw(draw_obj, px, py, fill):
+                    draw_obj.text((px, py), text, font=font, fill=fill)
 
-                draw_text_with_shadow(x, y, simple_draw)
+                if self.check_stack.isChecked():
+                    shadow_layer = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+                    shadow_draw = ImageDraw.Draw(shadow_layer)
+                    shadow_draw.fontmode = "L"
+                    draw_shadow_only(shadow_draw, x, y, simple_draw)
+                    blur_r = 1 if (is_preview and ss == 1) else max(2, ss)
+                    shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=blur_r))
+                    text_layer.paste(shadow_layer, (0, 0), shadow_layer)
+                    draw = ImageDraw.Draw(text_layer)
+                    draw.fontmode = "L"
+                draw_main_only(draw, x, y, simple_draw)
             else:
                 char_widths = []
                 for ch in text:
@@ -608,18 +627,27 @@ class WallpaperUltra(QWidget):
                 total_w = sum(char_widths) + letter_spacing * (len(text) - 1)
                 bbox = draw.textbbox((0, 0), text, font=font)
                 cy = (bbox[1] + bbox[3]) / 2
-                x = w * self.text_pos[0] - total_w / 2
-                y = h * self.text_pos[1] - cy
+                x = tw * self.text_pos[0] - total_w / 2
+                y = th * self.text_pos[1] - cy
 
-                def char_draw(px, py, fill):
+                def char_draw(draw_obj, px, py, fill):
                     for j, ch in enumerate(text):
-                        draw.text((px, py), ch, font=font, fill=fill)
+                        draw_obj.text((px, py), ch, font=font, fill=fill)
                         px += char_widths[j] + letter_spacing
 
-                draw_text_with_shadow(x, y, char_draw)
+                if self.check_stack.isChecked():
+                    shadow_layer = Image.new("RGBA", (tw, th), (0, 0, 0, 0))
+                    shadow_draw = ImageDraw.Draw(shadow_layer)
+                    shadow_draw.fontmode = "L"
+                    draw_shadow_only(shadow_draw, x, y, char_draw)
+                    blur_r = 1 if (is_preview and ss == 1) else max(2, ss)
+                    shadow_layer = shadow_layer.filter(ImageFilter.GaussianBlur(radius=blur_r))
+                    text_layer.paste(shadow_layer, (0, 0), shadow_layer)
+                    draw = ImageDraw.Draw(text_layer)
+                    draw.fontmode = "L"
+                draw_main_only(draw, x, y, char_draw)
 
             if self.check_italic.isChecked():
-                tw, th = text_layer.size
                 tx = -0.075 * th
                 try:
                     sheared = text_layer.transform(
@@ -631,6 +659,9 @@ class WallpaperUltra(QWidget):
                 except Exception:
                     pass
 
+            if ss > 1:
+                resample = Image.Resampling.BILINEAR if is_preview else Image.Resampling.LANCZOS
+                text_layer = text_layer.resize((w, h), resample)
             img.paste(text_layer, (0, 0), text_layer)
 
             return img
@@ -666,17 +697,16 @@ class WallpaperUltra(QWidget):
             display_w = max(400, self.width() - 350)
             display_h = max(300, self.height() - 50)
         img_w, img_h = self._get_wallpaper_size()
-        img = self.generate_img(img_w, img_h, is_preview=True)
         scale = min(display_w / img_w, display_h / img_h)
-        fit_w = int(img_w * scale)
-        fit_h = int(img_h * scale)
+        fit_w = max(320, int(img_w * scale))
+        fit_h = max(180, int(img_h * scale))
         if fit_w < 1 or fit_h < 1:
             return
-        img_scaled = img.resize((fit_w, fit_h), Image.Resampling.LANCZOS)
+        img = self.generate_img(fit_w, fit_h, is_preview=True)
         canvas = Image.new("RGB", (display_w, display_h), (0xD1, 0xD1, 0xD6))
         paste_x = (display_w - fit_w) // 2
         paste_y = (display_h - fit_h) // 2
-        canvas.paste(img_scaled, (paste_x, paste_y))
+        canvas.paste(img, (paste_x, paste_y))
         data = canvas.tobytes("raw", "RGB")
         qimg = QImage(data, display_w, display_h, display_w * 3,
                       QImage.Format.Format_RGB888)
@@ -725,8 +755,8 @@ class WallpaperUltra(QWidget):
             w, h = 1920, 1080
         final = self.generate_img(w, h, is_preview=False)
         out_dir = get_output_dir()
-        path = os.path.join(out_dir, self._get_wallpaper_filename())
-        final.save(path, quality=100)
+        path = os.path.join(out_dir, self._get_wallpaper_filename(ext=".png"))
+        final.save(path)
         ctypes.windll.user32.SystemParametersInfoW(20, 0, path, 3)
         print("壁纸已成功设置:", path, "(%d x %d)" % (w, h))
 
