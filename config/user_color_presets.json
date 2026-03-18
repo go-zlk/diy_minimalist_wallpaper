@@ -1,0 +1,9 @@
+{
+  "xxx": {
+    "text_color": "#212122",
+    "bg_color": "#f7f7f8",
+    "bg_color2": "#f7f7f8",
+    "gradient_mode": "纯色",
+    "gradient_direction": "上->下"
+  }
+}

@@ -1,0 +1,9 @@
+analyzer:
+  exclude:
+    - build/**
+    - .dart_tool/**
+    - third_party_*/**
+
+linter:
+  rules:
+    avoid_print: true

@@ -213,6 +213,39 @@ BUILTIN_COLOR_PRESETS = {
     },
 }
 
+# --- UI 设计规范：简约大方，全局统一 ---
+UI_STYLES = {
+    "bg_surface": "rgba(48, 48, 52, 0.95)",
+    "bg_surface_hover": "rgba(62, 62, 68, 0.95)",
+    "border": "rgba(255,255,255,0.08)",
+    "border_hover": "rgba(255,255,255,0.12)",
+    "text_primary": "#E8E8E8",
+    "text_secondary": "#A8A8B0",
+    "text_tertiary": "#787880",
+    "radius_sm": "6",
+    "radius_md": "8",
+    "radius_lg": "10",
+}
+UI_LABEL = "color: %(text_secondary)s; font-size: 12px;" % UI_STYLES
+UI_SECTION_LABEL = "color: %(text_primary)s; font-size: 13px; font-weight: 500;" % UI_STYLES
+UI_BTN_SECONDARY = (
+    "QPushButton { background: %(bg_surface)s; padding: 8px 12px; "
+    "border-radius: 6px; border: 1px solid %(border)s; color: %(text_primary)s; } "
+    "QPushButton:hover { background: %(bg_surface_hover)s; border-color: %(border_hover)s; } "
+) % UI_STYLES
+UI_INPUT = (
+    "background: %(bg_surface)s; border: 1px solid %(border)s; "
+    "border-radius: 8px; padding: 10px 12px; color: %(text_primary)s;"
+) % UI_STYLES
+UI_DIVIDER = "background: rgba(255,255,255,0.06); max-height: 1px;"
+UI_CHECKBOX = (
+    "QCheckBox { color: %(text_secondary)s; font-size: 12px; spacing: 6px; } "
+    "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; "
+    "background: %(bg_surface)s; border: 1px solid %(border)s; } "
+    "QCheckBox::indicator:checked { background: rgba(255,255,255,0.25); border-color: %(border_hover)s; } "
+    "QCheckBox:hover { color: %(text_primary)s; }"
+) % UI_STYLES
+
 
 class NoWheelComboBox(QComboBox):
     """禁用滚轮切换选项，避免误触"""
@@ -596,15 +629,15 @@ class InlineColorPickerRow(QWidget):
         layout.setContentsMargins(0, 6, 0, 6)
         layout.setSpacing(10)
         lbl = QLabel(label)
-        lbl.setStyleSheet("color: #9CA3AF; font-size: 14px;")
+        lbl.setStyleSheet(UI_SECTION_LABEL)
         layout.addWidget(lbl)
         layout.addStretch()
         self.trigger = QPushButton()
         self.trigger.setCursor(Qt.CursorShape.PointingHandCursor)
         self.trigger.setStyleSheet(
-            "QPushButton { background: rgba(50,50,55,0.8); border-radius: 8px; "
-            "border: 1px solid rgba(255,255,255,0.12); padding: 8px 12px; } "
-            "QPushButton:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }"
+            "QPushButton { background: %(bg_surface)s; border-radius: 8px; "
+            "border: 1px solid %(border)s; padding: 8px 12px; } "
+            "QPushButton:hover { background: %(bg_surface_hover)s; border-color: %(border_hover)s; }" % UI_STYLES
         )
         self.trigger.setFixedHeight(40)
         self.trigger.setMinimumWidth(120)
@@ -614,9 +647,9 @@ class InlineColorPickerRow(QWidget):
         trigger_layout.setSpacing(10)
         self.swatch = QLabel()
         self.swatch.setFixedSize(28, 28)
-        self.swatch.setStyleSheet("border-radius: 6px; border: 1px solid rgba(255,255,255,0.25);")
+        self.swatch.setStyleSheet("border-radius: 6px; border: 1px solid %s;" % UI_STYLES["border_hover"])
         self.hex_label = QLabel("#212122")
-        self.hex_label.setStyleSheet("color: #E0E0E0; font-size: 13px; font-family: monospace;")
+        self.hex_label.setStyleSheet("color: %s; font-size: 13px; font-family: monospace;" % UI_STYLES["text_primary"])
         trigger_layout.addWidget(self.swatch)
         trigger_layout.addWidget(self.hex_label)
         layout.addWidget(self.trigger)
@@ -626,7 +659,7 @@ class InlineColorPickerRow(QWidget):
         c = self.get_color_cb()
         if c is not None and c.isValid():
             self.swatch.setStyleSheet(
-                "background: %s; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2);" % c.name()
+                "background: %s; border-radius: 6px; border: 1px solid %s;" % (c.name(), UI_STYLES["border_hover"])
             )
             self.hex_label.setText(c.name())
 
@@ -689,16 +722,13 @@ class CollapsibleAdvancedBox(QWidget):
         self._arrow_collapsed = "▶"
         self._arrow_expanded = "▼"
         self.toggle_button = QPushButton(f"{self._arrow_collapsed}  {title}")
-        self.toggle_button.setStyleSheet("""
-            QPushButton {
-                font-weight: bold; font-size: 12px; color: #A0A0A0;
-                text-align: left; padding: 8px 12px;
-                background: rgba(255, 255, 255, 0.03);
-                border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.04);
-            }
-            QPushButton:hover { background: rgba(255, 255, 255, 0.06); color: #C0C0C0; }
-            QPushButton:checked { color: #E0E0E0; }
-        """)
+        self.toggle_button.setStyleSheet(
+            "QPushButton { font-weight: 500; font-size: 12px; color: %(text_secondary)s; "
+            "text-align: left; padding: 8px 12px; background: rgba(255,255,255,0.03); "
+            "border-radius: 6px; border: 1px solid %(border)s; } "
+            "QPushButton:hover { background: rgba(255,255,255,0.06); color: %(text_primary)s; } "
+            "QPushButton:checked { color: %(text_primary)s; }" % UI_STYLES
+        )
         self.toggle_button.setCheckable(True)
         self.toggle_button.setChecked(False)  # 默认折叠
 
@@ -1243,6 +1273,8 @@ class WallpaperUltra(QWidget):
         
         self._last_state_hash = 0
         self._gradient_drag_start = None  # 自定义渐变时，拖动起点 [x,y]
+        self._text_drag_start = None  # 文字定位：拖动起点 (x,y)，仅拖动时更新位置
+        self._text_drag_has_moved = False
         self.preview_running = False
         self.preview_queued = None
         self.preview_latest_req_id = 0
@@ -1360,7 +1392,7 @@ class WallpaperUltra(QWidget):
         self.setObjectName("mainWindow")
         self.setStyleSheet(
             "#mainWindow { background: #0D0D0F; } "
-            "QWidget { color: #E0E0E0; font-family: 'Segoe UI'; }"
+            "QWidget { color: %(text_primary)s; font-family: 'Segoe UI'; }" % UI_STYLES
         )
 
         main_layout = QHBoxLayout(self)
@@ -1371,13 +1403,10 @@ class WallpaperUltra(QWidget):
         sidebar_container = QWidget()
         sidebar_container.setMinimumWidth(300)
         sidebar_container.setFixedWidth(318)
-        sidebar_container.setStyleSheet("""
-            QWidget#sidebar {
-                background: rgba(30, 30, 35, 0.75);
-                border-radius: 16px;
-                border: 1px solid rgba(255, 255, 255, 0.08);
-            }
-        """)
+        sidebar_container.setStyleSheet(
+            "QWidget#sidebar { background: rgba(28, 28, 32, 0.9); "
+            "border-radius: 16px; border: 1px solid %(border)s; }" % UI_STYLES
+        )
         sidebar_container.setObjectName("sidebar")
         sidebar_main = QVBoxLayout(sidebar_container)
         sidebar_main.setSpacing(0)
@@ -1393,9 +1422,33 @@ class WallpaperUltra(QWidget):
         def _divider():
             f = QFrame()
             f.setFrameShape(QFrame.Shape.HLine)
-            f.setStyleSheet("background: rgba(255,255,255,0.06); max-height: 1px;")
+            f.setStyleSheet(UI_DIVIDER)
             f.setFixedHeight(1)
             return f
+
+        def _section_label(text):
+            lbl = QLabel(text)
+            lbl.setStyleSheet(UI_SECTION_LABEL)
+            return lbl
+
+        def _label_combo_row(label_text, widget):
+            """选项名与选项框同一行，左标签右控件，风格与字号/字间距一致"""
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            lbl = _section_label(label_text)
+            lbl.setMinimumWidth(80)
+            row.addWidget(lbl)
+            row.addWidget(widget, 1)
+            return row
+
+        def _label_slider_row(label_widget, slider_widget):
+            """标签与滑块同一行（标签内容会动态更新）"""
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            label_widget.setMinimumWidth(80)
+            row.addWidget(label_widget)
+            row.addWidget(slider_widget, 1)
+            return row
 
         # 单列排布：文字 + 背景，控件组间距统一 10px
         scroll_panel = QWidget()
@@ -1411,91 +1464,51 @@ class WallpaperUltra(QWidget):
         self.text_input.setMaximumHeight(120)
         self.text_input.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.text_input.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        self.text_input.setStyleSheet(
-            "background: rgba(50, 50, 55, 0.9); border-radius: 8px; "
-            "padding: 10px; border: 1px solid rgba(255,255,255,0.06);"
-        )
+        self.text_input.setStyleSheet(UI_INPUT)
         self.text_input.textChanged.connect(self.on_text_input_changed)
         self.text_input.textChanged.connect(self._update_text_input_height)
         text_row.addWidget(self.text_input, 1)
         self.btn_hitokoto = QPushButton("获取灵感")
         self.btn_hitokoto.setToolTip("从一言 API 获取随机文案并填入输入框，点击即可替换当前文案")
-        self.btn_hitokoto.setStyleSheet("""
-            QPushButton {
-                background: rgba(50, 50, 55, 0.9); padding: 8px 12px;
-                border-radius: 6px; border: 1px solid rgba(255,255,255,0.06);
-            }
-            QPushButton:hover { background: rgba(70, 70, 75, 0.9); border: 1px solid rgba(255,255,255,0.15); }
-        """)
+        self.btn_hitokoto.setStyleSheet(UI_BTN_SECONDARY)
         self.btn_hitokoto.clicked.connect(self.on_fetch_hitokoto)
         text_row.addWidget(self.btn_hitokoto, alignment=Qt.AlignmentFlag.AlignBottom)
         lt.addLayout(text_row)
         self._update_text_input_height()
 
         arrow_path = get_arrow_path().replace("\\", "/")
-        combo_style = """
-            QComboBox {
-                background: rgba(50, 50, 55, 0.95);
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 10px;
-                padding: 10px 12px;
-                padding-right: 32px;
-                padding-left: 12px;
-                min-height: 20px;
-                color: #E0E0E0;
-            }
-            QComboBox:hover { border-color: rgba(255,255,255,0.15); }
-            QComboBox::drop-down {
-                subcontrol-origin: padding;
-                subcontrol-position: right center;
-                right: 4px;
-                width: 24px;
-                border: none;
-                background: transparent;
-                border-radius: 6px;
-            }
-            QComboBox::down-arrow {
-                image: url("%s");
-                width: 12px;
-                height: 12px;
-            }
-        """ % arrow_path
-        combo_style += """
-            QComboBox QAbstractItemView {
-                background: rgba(45, 45, 50, 0.98);
-                border: 1px solid rgba(255,255,255,0.08);
-                border-radius: 10px;
-                padding: 6px;
-                selection-background-color: #0078D4;
-                selection-color: white;
-                outline: none;
-            }
-            QComboBox QAbstractItemView::item {
-                min-height: 28px;
-                padding: 4px 10px;
-                border-radius: 6px;
-            }
-        """
-        lt.addWidget(QLabel("预设文案:"))
+        _cs = {**UI_STYLES, "arrow": arrow_path}
+        combo_base = (
+            "QComboBox { background: %(bg_surface)s; border: 1px solid %(border)s; "
+            "border-radius: 10px; padding: 10px 12px; padding-right: 32px; padding-left: 12px; "
+            "min-height: 20px; color: %(text_primary)s; } "
+            "QComboBox:hover { border-color: %(border_hover)s; } "
+            "QComboBox::drop-down { subcontrol-origin: padding; subcontrol-position: right center; "
+            "right: 4px; width: 24px; border: none; background: transparent; border-radius: 6px; } "
+            "QComboBox::down-arrow { image: url(\"%(arrow)s\"); width: 12px; height: 12px; } "
+        ) % _cs
+        combo_style = combo_base + (
+            "QComboBox QAbstractItemView { background: rgba(42, 42, 48, 0.98); "
+            "border: 1px solid %(border)s; border-radius: 10px; padding: 6px; "
+            "selection-background-color: #4A6FA5; selection-color: white; outline: none; } "
+            "QComboBox QAbstractItemView::item { min-height: 28px; padding: 4px 10px; border-radius: 6px; }"
+        ) % _cs
         self.combo_preset_text = NoWheelComboBox()
         self.combo_preset_text.setToolTip("选择预设后自动填入上方输入框；手动编辑时自动切换为「自定义」")
         self.combo_preset_text.addItems(PRESET_TEXTS)
         self.combo_preset_text.setCurrentText("INFINITE PROGRESS")
         self.combo_preset_text.setStyleSheet(combo_style)
         self.combo_preset_text.currentTextChanged.connect(self._on_preset_text_changed)
-        lt.addWidget(self.combo_preset_text)
+        lt.addLayout(_label_combo_row("预设文案:", self.combo_preset_text))
 
-        lt.addWidget(QLabel("字体:"))
         self.combo_font = NoWheelComboBox()
         self.combo_font.addItem("默认字体")
         self.combo_font.setStyleSheet(combo_style)
         self.combo_font.currentTextChanged.connect(self.on_font_changed)
-        lt.addWidget(self.combo_font)
+        lt.addLayout(_label_combo_row("字体:", self.combo_font))
 
         self.label_font_hint = QLabel("")
-        self.label_font_hint.setStyleSheet(
-            "color: #E67E22; font-size: 11px; padding: 2px 0;"
-        )
+        self.label_font_hint.setStyleSheet("color: #D4A574; font-size: 11px; padding: 2px 0;")
         self.label_font_hint.setWordWrap(True)
         lt.addWidget(self.label_font_hint)
 
@@ -1505,7 +1518,7 @@ class WallpaperUltra(QWidget):
         size_row = QHBoxLayout()
         size_row.setSpacing(8)
         self.label_font_size = QLabel("字号: 100 px")
-        self.label_font_size.setStyleSheet("color: #A0A0A0; font-size: 12px;")
+        self.label_font_size.setStyleSheet(UI_LABEL)
         self.label_font_size.setMinimumWidth(72)
         size_row.addWidget(self.label_font_size)
         self.slider_size = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -1521,7 +1534,7 @@ class WallpaperUltra(QWidget):
         letter_spacing_row = QHBoxLayout()
         letter_spacing_row.setSpacing(8)
         self.label_letter_spacing = QLabel("字间距: 0")
-        self.label_letter_spacing.setStyleSheet("color: #A0A0A0; font-size: 12px;")
+        self.label_letter_spacing.setStyleSheet(UI_LABEL)
         self.label_letter_spacing.setMinimumWidth(72)
         letter_spacing_row.addWidget(self.label_letter_spacing)
         self.slider_letter_spacing = NoWheelSlider(Qt.Orientation.Horizontal)
@@ -1537,7 +1550,6 @@ class WallpaperUltra(QWidget):
         lt.addWidget(_divider())
         lt.addSpacing(2)
 
-        lt.addWidget(QLabel("排版模式:"))
         self.combo_layout_mode = NoWheelComboBox()
         self.combo_layout_mode.setToolTip(
             "自由排列：单行居中；主副标题：首行大、次行小；英文底纹+中文小字：英文作背景、中文叠加"
@@ -1546,7 +1558,7 @@ class WallpaperUltra(QWidget):
         self.combo_layout_mode.setCurrentText(self.layout_mode)
         self.combo_layout_mode.setStyleSheet(combo_style)
         self.combo_layout_mode.currentTextChanged.connect(self.on_layout_mode_changed)
-        lt.addWidget(self.combo_layout_mode)
+        lt.addLayout(_label_combo_row("排版模式:", self.combo_layout_mode))
 
         self.check_safe_zone = QCheckBox("显示移动端安全区蒙版")
         self.check_safe_zone.setToolTip("在预览区叠层显示 iPhone/Android 刘海、挖孔等遮挡区域")
@@ -1576,8 +1588,7 @@ class WallpaperUltra(QWidget):
         # 文字设计：高级特效折叠面板（阴影、叠影、斜体）
         self._adv_text = CollapsibleAdvancedBox("✨ 高级特效")
         self.label_shadow_offset = QLabel("阴影偏移量: 0")
-        self.label_shadow_offset.setStyleSheet("color: #A0A0A0; font-size: 12px;")
-        self._adv_text.addWidget(self.label_shadow_offset)
+        self.label_shadow_offset.setStyleSheet(UI_LABEL)
         self.slider_shadow_offset = NoWheelSlider(Qt.Orientation.Horizontal)
         self.slider_shadow_offset.setRange(0, 200)
         self.slider_shadow_offset.valueChanged.connect(self.on_shadow_offset_changed)
@@ -1587,14 +1598,16 @@ class WallpaperUltra(QWidget):
         self.slider_shadow_offset.blockSignals(True)
         self.slider_shadow_offset.setValue(0)
         self.slider_shadow_offset.blockSignals(False)
-        self._adv_text.addWidget(self.slider_shadow_offset)
+        self._adv_text.addLayout(_label_slider_row(self.label_shadow_offset, self.slider_shadow_offset))
 
         self.check_stack = QCheckBox("启用叠影效果")
+        self.check_stack.setStyleSheet(UI_CHECKBOX)
         self.check_stack.setChecked(True)
         self.check_stack.stateChanged.connect(self.on_stack_toggled)
         self._adv_text.addWidget(self.check_stack)
 
         self.check_italic = QCheckBox("模拟斜体")
+        self.check_italic.setStyleSheet(UI_CHECKBOX)
         self.check_italic.stateChanged.connect(self.on_italic_toggled)
         self._adv_text.addWidget(self.check_italic)
 
@@ -1602,15 +1615,13 @@ class WallpaperUltra(QWidget):
 
         lt.addWidget(_divider())
         lt.addSpacing(2)
-        lt.addWidget(QLabel("壁纸比例:"))
         self.combo_aspect = NoWheelComboBox()
         self.combo_aspect.addItems(list(ASPECT_RATIOS.keys()))
         self.combo_aspect.setCurrentText("16:9")
         self.combo_aspect.setStyleSheet(combo_style)
         self.combo_aspect.currentTextChanged.connect(self.on_aspect_changed)
-        lt.addWidget(self.combo_aspect)
+        lt.addLayout(_label_combo_row("壁纸比例:", self.combo_aspect))
 
-        lt.addWidget(QLabel("预览质量:"))
         self.combo_preview_quality = NoWheelComboBox()
         self.combo_preview_quality.setToolTip(
             "速度优先：快速预览；平衡：质量与速度折中；所见即所得：预览最接近导出效果"
@@ -1619,17 +1630,16 @@ class WallpaperUltra(QWidget):
         self.combo_preview_quality.setCurrentText(self.preview_profile)
         self.combo_preview_quality.setStyleSheet(combo_style)
         self.combo_preview_quality.currentTextChanged.connect(self.on_preview_quality_changed)
-        lt.addWidget(self.combo_preview_quality)
+        lt.addLayout(_label_combo_row("预览质量:", self.combo_preview_quality))
 
-        lt.addWidget(QLabel("背景模式:"))
         self.combo_bg_gradient = NoWheelComboBox()
         self.combo_bg_gradient.addItems(["纯色", "线性渐变", "径向渐变"])
         self.combo_bg_gradient.setCurrentText(self.bg_gradient_mode)
         self.combo_bg_gradient.setStyleSheet(combo_style)
         self.combo_bg_gradient.currentTextChanged.connect(self.on_bg_gradient_mode_changed)
-        lt.addWidget(self.combo_bg_gradient)
+        lt.addLayout(_label_combo_row("背景模式:", self.combo_bg_gradient))
 
-        self.label_linear_direction = QLabel("线性渐变方向:")
+        self.label_linear_direction = _section_label("线性渐变方向:")
         lt.addWidget(self.label_linear_direction)
         self._gradient_direction_btns = {}
         self._gradient_direction_group = QButtonGroup(self)
@@ -1642,15 +1652,15 @@ class WallpaperUltra(QWidget):
         _btn_row = QHBoxLayout()
         _btn_base = (
             "QPushButton { padding: 10px 14px; border-radius: 8px; font-size: 18px; font-weight: bold; "
-            "border: 2px solid rgba(255,255,255,0.1); } "
-            "QPushButton:hover { border-color: rgba(255,255,255,0.2); } "
-            "QPushButton:checked { border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.08); } "
-        )
+            "background: %(bg_surface)s; border: 1px solid %(border)s; color: %(text_primary)s; } "
+            "QPushButton:hover { border-color: %(border_hover)s; background: %(bg_surface_hover)s; } "
+            "QPushButton:checked { border-color: %(border_hover)s; background: rgba(255,255,255,0.1); } "
+        ) % UI_STYLES
         for direction, arrow, grad in _dirs:
             btn = QPushButton(arrow)
             btn.setCheckable(True)
             btn.setProperty("direction", direction)
-            btn.setStyleSheet(_btn_base + "QPushButton { background: %s; }" % grad)
+            btn.setStyleSheet(_btn_base)
             btn.setToolTip(direction)
             btn.clicked.connect(lambda checked, d=direction: self._on_gradient_direction_clicked(d))
             self._gradient_direction_btns[direction] = btn
@@ -1659,20 +1669,21 @@ class WallpaperUltra(QWidget):
         self._btn_gradient_custom = QPushButton("自定义")
         self._btn_gradient_custom.setCheckable(True)
         self._btn_gradient_custom.setToolTip("在预览区拖动以调整渐变方向")
-        self._btn_gradient_custom.setStyleSheet(
-            _btn_base + "QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #505050,stop:1 #303030); }"
-        )
+        self._btn_gradient_custom.setStyleSheet(_btn_base)
         self._btn_gradient_custom.clicked.connect(lambda: self._on_gradient_direction_clicked("自定义"))
         self._gradient_direction_btns["自定义"] = self._btn_gradient_custom
         self._gradient_direction_group.addButton(self._btn_gradient_custom)
         _btn_row.addWidget(self._btn_gradient_custom)
         _btn_row.addStretch()
         lt.addLayout(_btn_row)
-        self.label_radial = QLabel("径向渐变:")
+        self.label_radial = _section_label("径向渐变:")
         lt.addWidget(self.label_radial)
+        radial_row = QHBoxLayout()
+        radial_row.setSpacing(8)
         self.label_radial_radius = QLabel("中心区域大小: 50%")
-        self.label_radial_radius.setStyleSheet("color: #A0A0A0; font-size: 12px;")
-        lt.addWidget(self.label_radial_radius)
+        self.label_radial_radius.setStyleSheet(UI_LABEL)
+        self.label_radial_radius.setMinimumWidth(80)
+        radial_row.addWidget(self.label_radial_radius)
         self.slider_radial_radius = NoWheelSlider(Qt.Orientation.Horizontal)
         self.slider_radial_radius.setRange(0, 100)
         self.slider_radial_radius.setValue(50)
@@ -1680,7 +1691,8 @@ class WallpaperUltra(QWidget):
         self.slider_radial_radius.sliderPressed.connect(self.begin_preview_interaction)
         self.slider_radial_radius.sliderReleased.connect(self.end_preview_interaction)
         self.slider_radial_radius.sliderReleased.connect(self._push_history)
-        lt.addWidget(self.slider_radial_radius)
+        radial_row.addWidget(self.slider_radial_radius, 1)
+        lt.addLayout(radial_row)
 
         lt.addWidget(_divider())
         lt.addSpacing(2)
@@ -1744,16 +1756,11 @@ class WallpaperUltra(QWidget):
 
         lt.addWidget(_divider())
         lt.addSpacing(2)
-        _sec_btn = (
-            "QPushButton { background: rgba(50,50,55,0.9); padding: 8px; "
-            "border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); } "
-            "QPushButton:hover { background: rgba(70, 70, 75, 0.9); border-color: rgba(0,120,212,0.4); }"
-        )
         bg_btn_row = QHBoxLayout()
         self.btn_pick_bg_image = QPushButton("📁 导入背景图")
         self.btn_clear_bg_image = QPushButton("✖ 清除图层")
         for btn in (self.btn_pick_bg_image, self.btn_clear_bg_image):
-            btn.setStyleSheet(_sec_btn)
+            btn.setStyleSheet(UI_BTN_SECONDARY)
         self.btn_pick_bg_image.clicked.connect(self.on_pick_bg_image)
         self.btn_clear_bg_image.clicked.connect(self.on_clear_bg_image)
         bg_btn_row.addWidget(self.btn_pick_bg_image)
@@ -1762,18 +1769,17 @@ class WallpaperUltra(QWidget):
 
         self.btn_extract_color = QPushButton("💧 提取背景主色")
         self.btn_extract_color.setToolTip("从已导入的背景图中自动提取主色，并应用于文字或背景颜色")
-        self.btn_extract_color.setStyleSheet(_sec_btn)
+        self.btn_extract_color.setStyleSheet(UI_BTN_SECONDARY)
         self.btn_extract_color.clicked.connect(self.on_extract_bg_color)
         lt.addWidget(self.btn_extract_color)
 
         self.label_bg_image_path = QLabel("当前背景图: 未选择")
         self.label_bg_image_path.setWordWrap(True)
-        self.label_bg_image_path.setStyleSheet("color: #A0A0A0; font-size: 12px;")
+        self.label_bg_image_path.setStyleSheet(UI_LABEL)
         lt.addWidget(self.label_bg_image_path)
 
         self.label_bg_opacity = QLabel("背景图透明度: 100%")
-        self.label_bg_opacity.setStyleSheet("color: #A0A0A0; font-size: 12px;")
-        lt.addWidget(self.label_bg_opacity)
+        self.label_bg_opacity.setStyleSheet(UI_LABEL)
         self.slider_bg_opacity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.slider_bg_opacity.setRange(0, 100)
         self.slider_bg_opacity.setValue(100)
@@ -1781,13 +1787,12 @@ class WallpaperUltra(QWidget):
         self.slider_bg_opacity.sliderPressed.connect(self.begin_preview_interaction)
         self.slider_bg_opacity.sliderReleased.connect(self.end_preview_interaction)
         self.slider_bg_opacity.sliderReleased.connect(self._push_history)
-        lt.addWidget(self.slider_bg_opacity)
+        lt.addLayout(_label_slider_row(self.label_bg_opacity, self.slider_bg_opacity))
 
         # 高级特效折叠面板（毛玻璃、暗角、噪点）
         self._adv_bg = CollapsibleAdvancedBox("✨ 高级特效")
         self.label_bg_blur = QLabel("背景图毛玻璃(Blur): 0")
-        self.label_bg_blur.setStyleSheet("color: #A0A0A0; font-size: 12px;")
-        self._adv_bg.addWidget(self.label_bg_blur)
+        self.label_bg_blur.setStyleSheet(UI_LABEL)
         self.slider_bg_blur = NoWheelSlider(Qt.Orientation.Horizontal)
         self.slider_bg_blur.setRange(0, 100)
         self.slider_bg_blur.setValue(0)
@@ -1795,11 +1800,10 @@ class WallpaperUltra(QWidget):
         self.slider_bg_blur.sliderPressed.connect(self.begin_preview_interaction)
         self.slider_bg_blur.sliderReleased.connect(self.end_preview_interaction)
         self.slider_bg_blur.sliderReleased.connect(self._push_history)
-        self._adv_bg.addWidget(self.slider_bg_blur)
+        self._adv_bg.addLayout(_label_slider_row(self.label_bg_blur, self.slider_bg_blur))
 
         self.label_bg_vignette = QLabel("暗角遮罩(Vignette): 0")
-        self.label_bg_vignette.setStyleSheet("color: #A0A0A0; font-size: 12px;")
-        self._adv_bg.addWidget(self.label_bg_vignette)
+        self.label_bg_vignette.setStyleSheet(UI_LABEL)
         self.slider_bg_vignette = NoWheelSlider(Qt.Orientation.Horizontal)
         self.slider_bg_vignette.setRange(0, 100)
         self.slider_bg_vignette.setValue(0)
@@ -1807,14 +1811,14 @@ class WallpaperUltra(QWidget):
         self.slider_bg_vignette.sliderPressed.connect(self.begin_preview_interaction)
         self.slider_bg_vignette.sliderReleased.connect(self.end_preview_interaction)
         self.slider_bg_vignette.sliderReleased.connect(self._push_history)
-        self._adv_bg.addWidget(self.slider_bg_vignette)
+        self._adv_bg.addLayout(_label_slider_row(self.label_bg_vignette, self.slider_bg_vignette))
 
         self.check_noise = QCheckBox("高级质感: 拍立得噪点 (Noise)")
+        self.check_noise.setStyleSheet(UI_CHECKBOX)
         self.check_noise.stateChanged.connect(self.on_noise_toggled)
         self._adv_bg.addWidget(self.check_noise)
         self.label_noise_intensity = QLabel("噪点强度: 40")
-        self.label_noise_intensity.setStyleSheet("color: #A0A0A0; font-size: 12px;")
-        self._adv_bg.addWidget(self.label_noise_intensity)
+        self.label_noise_intensity.setStyleSheet(UI_LABEL)
         self.slider_noise_intensity = NoWheelSlider(Qt.Orientation.Horizontal)
         self.slider_noise_intensity.setRange(0, 100)
         self.slider_noise_intensity.setValue(40)
@@ -1822,7 +1826,7 @@ class WallpaperUltra(QWidget):
         self.slider_noise_intensity.sliderPressed.connect(self.begin_preview_interaction)
         self.slider_noise_intensity.sliderReleased.connect(self.end_preview_interaction)
         self.slider_noise_intensity.sliderReleased.connect(self._push_history)
-        self._adv_bg.addWidget(self.slider_noise_intensity)
+        self._adv_bg.addLayout(_label_slider_row(self.label_noise_intensity, self.slider_noise_intensity))
 
         lt.addWidget(self._adv_bg)
 
@@ -1854,16 +1858,18 @@ class WallpaperUltra(QWidget):
 
         self.btn_save = QPushButton("保存图片")
         self.btn_save.setStyleSheet(
-            "background: rgba(50, 50, 55, 0.9); height: 36px; border-radius: 8px; "
-            "border: 1px solid rgba(255,255,255,0.08); font-size: 13px;"
+            "QPushButton { background: %(bg_surface)s; height: 36px; border-radius: 8px; "
+            "border: 1px solid %(border)s; color: %(text_primary)s; font-size: 13px; } "
+            "QPushButton:hover { background: %(bg_surface_hover)s; border-color: %(border_hover)s; }" % UI_STYLES
         )
         self.btn_save.clicked.connect(self.save_image)
         bottom_layout.addWidget(self.btn_save)
 
         self.btn_gallery = QPushButton("📷 相册库")
         self.btn_gallery.setStyleSheet(
-            "background: rgba(50, 50, 55, 0.9); height: 36px; border-radius: 8px; "
-            "border: 1px solid rgba(255,255,255,0.08); font-size: 13px;"
+            "QPushButton { background: %(bg_surface)s; height: 36px; border-radius: 8px; "
+            "border: 1px solid %(border)s; color: %(text_primary)s; font-size: 13px; } "
+            "QPushButton:hover { background: %(bg_surface_hover)s; border-color: %(border_hover)s; }" % UI_STYLES
         )
         self.btn_gallery.clicked.connect(self.show_gallery)
         bottom_layout.addWidget(self.btn_gallery)
@@ -1890,8 +1896,8 @@ class WallpaperUltra(QWidget):
         undo_bar = QFrame()
         undo_bar.setToolTip("画布操作：撤销 / 重做")
         undo_bar.setStyleSheet(
-            "QFrame { background: rgba(0, 0, 0, 0.25); border-radius: 8px; "
-            "border: 1px solid rgba(255,255,255,0.06); }"
+            "QFrame { background: rgba(0, 0, 0, 0.3); border-radius: 8px; "
+            "border: 1px solid %(border)s; }" % UI_STYLES
         )
         undo_layout = QHBoxLayout(undo_bar)
         undo_layout.setContentsMargins(10, 6, 10, 6)
@@ -1901,8 +1907,9 @@ class WallpaperUltra(QWidget):
         self.btn_redo = QPushButton("↷ 重做")
         for btn in (self.btn_undo, self.btn_redo):
             btn.setStyleSheet(
-                "background: rgba(40, 40, 45, 0.9); height: 28px; min-width: 64px; "
-                "border-radius: 6px; border: 1px solid rgba(255,255,255,0.1); color: #E0E0E0;"
+                "QPushButton { background: %(bg_surface)s; height: 28px; min-width: 64px; "
+                "border-radius: 6px; border: 1px solid %(border)s; color: %(text_primary)s; } "
+                "QPushButton:hover { background: %(bg_surface_hover)s; border-color: %(border_hover)s; }" % UI_STYLES
             )
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_undo.clicked.connect(self.on_undo)
@@ -1958,9 +1965,9 @@ class WallpaperUltra(QWidget):
         return self.text_input.toPlainText()
 
     def _update_text_input_height(self):
-        """根据实际行数调整输入框高度，无后续文字时不显示空行"""
+        """根据实际行数调整输入框高度，含末尾空行（按回车即展开）"""
         text = self.text_input.toPlainText()
-        lines = text.rstrip("\n").split("\n") if text.strip() else [""]
+        lines = text.split("\n") if text else [""]
         line_count = max(1, len(lines))
         h = min(120, max(40, line_count * 26 + 16))
         self.text_input.setFixedHeight(h)
@@ -2296,8 +2303,6 @@ class WallpaperUltra(QWidget):
         self.update_preview()
 
     def on_preview_area_update(self, norm_x, norm_y):
-        self._mark_custom_preset()
-
         # 自定义渐变方向：在预览区拖动设置渐变线（起点->终点）
         if self._is_editing_gradient():
             if self._gradient_drag_start is None:
@@ -2306,11 +2311,22 @@ class WallpaperUltra(QWidget):
                 self._gradient_drag_start[0], self._gradient_drag_start[1],
                 norm_x, norm_y
             ]
+            self._mark_custom_preset()
             self.preview_area.setGradientLine(self.gradient_line)
             self.update_preview()
             return
 
-        # 文字位置：吸附逻辑
+        # 文字位置：仅拖动时更新，点击不移动
+        if self._text_drag_start is None:
+            self._text_drag_start = (norm_x, norm_y)
+            self._text_drag_has_moved = False
+            return
+        dx = norm_x - self._text_drag_start[0]
+        dy = norm_y - self._text_drag_start[1]
+        if not self._text_drag_has_moved:
+            if dx * dx + dy * dy < 0.0004:  # 移动距离 < 2% 视为未拖动
+                return
+            self._text_drag_has_moved = True
         snap_points = [0.333, 0.5, 0.666]
         snap_threshold = 0.03
         snapped_x = norm_x
@@ -2323,6 +2339,7 @@ class WallpaperUltra(QWidget):
             if abs(norm_y - sp) < snap_threshold:
                 snapped_y = sp
                 snap_lines.append({'axis': 'h', 'val': sp})
+        self._mark_custom_preset()
         self.preview_area.setSnapLines(snap_lines)
         self.text_pos = [snapped_x, snapped_y]
         self.update_preview()
@@ -2330,7 +2347,11 @@ class WallpaperUltra(QWidget):
     def on_preview_area_interaction_ended(self):
         if self._gradient_drag_start is not None:
             self._push_history()  # 自定义渐变拖动结束后记录历史
+        if self._text_drag_has_moved:
+            self._push_history()  # 文字拖动结束后记录历史
         self._gradient_drag_start = None
+        self._text_drag_start = None
+        self._text_drag_has_moved = False
         self.preview_area.setSnapLines([])
         self.end_preview_interaction()
 

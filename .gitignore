@@ -2,3 +2,6 @@ build
 dist
 output
 arrow_down.png
+__pycache__
+.pytest_cache
+*.pyc
